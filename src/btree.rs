@@ -20,18 +20,6 @@ where
     type Map = InnerBTreeMap<K, V>;
 }
 
-impl<K, V> Extend<(Ref<K>, Ref<V>)> for InnerBTreeMap<K, V>
-where
-    K: Ord,
-{
-    fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = (Ref<K>, Ref<V>)>,
-    {
-        self.map.extend(iter)
-    }
-}
-
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InnerBTreeMap<K, V> {
     map: BTreeMap<Ref<K>, Ref<V>>,
@@ -137,6 +125,18 @@ where
         Self {
             map: BTreeMap::default(),
         }
+    }
+}
+
+impl<K, V> Extend<(Ref<K>, Ref<V>)> for InnerBTreeMap<K, V>
+where
+    K: Ord,
+{
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = (Ref<K>, Ref<V>)>,
+    {
+        self.map.extend(iter);
     }
 }
 

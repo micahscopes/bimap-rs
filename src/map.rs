@@ -16,6 +16,30 @@ pub trait MapKind<K, V> {
         + Extend<(Ref<K>, Ref<V>)>;
 }
 
+pub trait FullMap:
+    Default
+    + Extend<(Ref<<Self as Map>::Key>, Ref<<Self as Map>::Value>)>
+    + Map
+    + Length
+    + Insert
+    + Contains<<Self as Map>::Key>
+    + Get<<Self as Map>::Key>
+    + Remove<<Self as Map>::Key>
+{
+}
+
+impl<M, K, V> FullMap for M where
+    M: Default
+        + Extend<(Ref<K>, Ref<V>)>
+        + Map<Key = K, Value = V>
+        + Length
+        + Insert
+        + Contains<K>
+        + Get<K>
+        + Remove<K>
+{
+}
+
 pub trait Contains<Q: ?Sized>: Map {
     fn contains(&self, key: &Q) -> bool;
 }
