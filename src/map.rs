@@ -1,4 +1,4 @@
-use crate::Ref;
+use crate::mem::Ref;
 
 pub trait Map {
     type Key;
@@ -10,18 +10,26 @@ pub trait MapKind<K, V> {
 }
 
 pub trait FullMap:
-    Default
-    + Map
-    + Length
-    + Insert
+    Map
     + Contains<<Self as Map>::Key>
     + Get<<Self as Map>::Key>
+    + Insert
+    + Length
     + Remove<<Self as Map>::Key>
+    + Default
+    + Extend<(Ref<<Self as Map>::Key>, Ref<<Self as Map>::Value>)>
 {
 }
 
 impl<M, K, V> FullMap for M where
-    M: Default + Map<Key = K, Value = V> + Length + Insert + Contains<K> + Get<K> + Remove<K>
+    M: Map<Key = K, Value = V>
+        + Contains<K>
+        + Get<K>
+        + Insert
+        + Length
+        + Remove<K>
+        + Default
+        + Extend<(Ref<K>, Ref<V>)>
 {
 }
 

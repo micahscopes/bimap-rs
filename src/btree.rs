@@ -1,13 +1,13 @@
 use crate::{
     map::*,
-    mem::{Ref, Wrap},
+    mem::{Ref, Wrap, Wrapped},
 };
 
 use alloc::collections::{btree_map, BTreeMap};
 use core::{
     borrow::Borrow,
     iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator},
-    ops::Deref,
+    ops::{Bound, Deref, RangeBounds},
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -20,9 +20,47 @@ where
     type Map = InnerBTreeMap<K, V>;
 }
 
+impl<K, V> Extend<(Ref<K>, Ref<V>)> for InnerBTreeMap<K, V>
+where
+    K: Ord,
+{
+    fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = (Ref<K>, Ref<V>)>,
+    {
+        self.map.extend(iter)
+    }
+}
+
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InnerBTreeMap<K, V> {
     map: BTreeMap<Ref<K>, Ref<V>>,
+}
+
+fn wrap_bound<T: ?Sized>(bound: Bound<&T>) -> Bound<&Wrapped<T>> {
+    match bound {
+        Bound::Included(x) => Bound::Included(x.wrap()),
+        Bound::Excluded(x) => Bound::Excluded(x.wrap()),
+        Bound::Unbounded => Bound::Unbounded,
+    }
+}
+
+impl<K, V> InnerBTreeMap<K, V>
+where
+    K: Ord,
+{
+    pub fn range<A, Q: ?Sized>(&self, range: A) -> Range<'_, K, V>
+    where
+        K: Borrow<Q>,
+        A: RangeBounds<Q>,
+        Q: Ord,
+    {
+        let start = wrap_bound(range.start_bound());
+        let end = wrap_bound(range.end_bound());
+        Range {
+            iter: self.map.range::<Wrapped<Q>, _>((start, end)),
+        }
+    }
 }
 
 impl<K, V> Map for InnerBTreeMap<K, V> {
@@ -161,3 +199,19 @@ impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {
 }
 
 impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
+
+pub struct Range<'a, K, V> {
+    iter: btree_map::Range<'a, Ref<K>, Ref<V>>,
+}
+
+impl<'a, K, V> Iterator for Range<'a, K, V> {
+    type Item = (&'a K, &'a V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(|(k, v)| (k.deref(), v.deref()))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
