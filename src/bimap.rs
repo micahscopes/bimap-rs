@@ -1,21 +1,30 @@
-use crate::{btree::InnerBTreeMap, mem::Ref, map::{Map, FullMap, Contains, Iterate, Get}};
+use crate::{
+    btree::{self, BTreeKind},
+    map::*,
+    mem::Ref,
+};
 
 use core::{borrow::Borrow, ops::RangeBounds};
 
-pub struct RawBiMap<LM, RM> {
-    left_map: LM,
-    right_map: RM,
+pub struct BiMap<L, R, LK, RK>
+where
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
+    left_map: LK::Map,
+    right_map: RK::Map,
 }
 
-impl<L, R, LM, RM> RawBiMap<LM, RM>
+impl<L, R, LK, RK> BiMap<L, R, LK, RK>
 where
-    LM: FullMap<Key = L, Value = R>,
-    RM: FullMap<Key = R, Value = L>,
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
 {
+    /// Creates an empty bimap.
     pub fn new() -> Self {
         Self {
-            left_map: LM::default(),
-            right_map: RM::default(),
+            left_map: Default::default(),
+            right_map: Default::default(),
         }
     }
 
@@ -34,37 +43,55 @@ where
 
     pub fn left_contains<Q: ?Sized>(&self, left: &Q) -> bool
     where
-        LM: Contains<Q>,
+        LK::Map: Contains<Q>,
     {
         self.left_map.contains(left)
     }
 
     pub fn left_get<Q: ?Sized>(&self, left: &Q) -> Option<&R>
     where
-        LM: Get<Q>,
+        LK::Map: Get<Q>,
     {
         self.left_map.get(left)
     }
 
     pub fn left_get_entry<Q: ?Sized>(&self, left: &Q) -> Option<(&L, &R)>
     where
-        LM: Get<Q>,
+        LK::Map: Get<Q>,
     {
         self.left_map.get_entry(left)
     }
 
-    pub fn left_iter<'a>(&'a self) -> LeftIter<'a, LM>
+    pub fn left_iter<'a>(&'a self) -> LeftIter<'a, LK::Map>
     where
-        LM: Iterate<'a>,
+        LK::Map: Iterate<'a>,
     {
         LeftIter {
             iter: self.left_map.iter(),
         }
     }
 
-    pub fn right_iter<'a>(&'a self) -> RightIter<'a, RM>
+    pub fn left_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
     where
-        RM: Iterate<'a>,
+        LK::Map: Remove<Q>,
+    {
+        let (left_a, right_a) = self.left_map.remove(key)?;
+        let (right_b, left_b) = self.right_map.remove(&right_a).unwrap();
+        Some(Self::rejoin_pair((left_a, right_a), (left_b, right_b)))
+    }
+
+    pub fn right_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
+    where
+        RK::Map: Remove<Q>,
+    {
+        let (right_a, left_a) = self.right_map.remove(key)?;
+        let (left_b, right_b) = self.left_map.remove(&left_a).unwrap();
+        Some(Self::rejoin_pair((left_a, right_a), (left_b, right_b)))
+    }
+
+    pub fn right_iter<'a>(&'a self) -> RightIter<'a, RK::Map>
+    where
+        RK::Map: Iterate<'a>,
     {
         RightIter {
             iter: self.right_map.iter(),
@@ -72,16 +99,28 @@ where
     }
 
     fn insert_unchecked(&mut self, left: L, right: R) {
-        let (left_a, left_b) = Ref::share(left);
-        let (right_a, right_b) = Ref::share(right);
+        let ((left_a, right_a), (left_b, right_b)) = Self::share_pair(left, right);
         self.left_map.insert(left_a, right_a);
         self.right_map.insert(right_b, left_b);
     }
+
+    fn share_pair(left: L, right: R) -> ((Ref<L>, Ref<R>), (Ref<L>, Ref<R>)) {
+        let (left_a, left_b) = Ref::share(left);
+        let (right_a, right_b) = Ref::share(right);
+        ((left_a, right_a), (left_b, right_b))
+    }
+
+    fn rejoin_pair(a: (Ref<L>, Ref<R>), b: (Ref<L>, Ref<R>)) -> (L, R) {
+        let (left_a, right_a) = a;
+        let (left_b, right_b) = b;
+        (Ref::rejoin(left_a, left_b), Ref::rejoin(right_a, right_b))
+    }
 }
 
-impl<L, R, RM> RawBiMap<InnerBTreeMap<L, R>, RM>
+impl<L, R, RK> BiMap<L, R, BTreeKind, RK>
 where
-    RM: FullMap<Key = R, Value = L>,
+    RK: MapKind<R, L>,
+    L: Ord,
 {
     pub fn left_range<A, Q: ?Sized>(&self, range: A) -> LeftRange<'_, L, R>
     where
@@ -92,18 +131,6 @@ where
         LeftRange {
             iter: self.left_map.range(range),
         }
-    }
-}
-
-pub struct LeftRange<'a, L, R> {
-    iter: crate::btree::Range<'a, L, R>,
-}
-
-impl<'a, L, R> Iterator for LeftRange<'a, L, R> {
-    type Item = (&'a L, &'a R);
-
-    fn next(&mut self) -> Option<(&'a L, &'a R)> {
-        self.iter.next()
     }
 }
 
@@ -121,6 +148,18 @@ where
     type Item = (&'a L, &'a R);
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+}
+
+pub struct LeftRange<'a, L, R> {
+    iter: btree::Range<'a, L, R>,
+}
+
+impl<'a, L, R> Iterator for LeftRange<'a, L, R> {
+    type Item = (&'a L, &'a R);
+
+    fn next(&mut self) -> Option<(&'a L, &'a R)> {
         self.iter.next()
     }
 }

@@ -7,8 +7,6 @@ pub mod btree;
 pub mod map;
 pub mod mem;
 
-use crate::{bimap::RawBiMap, btree::BTreeKind, map::MapKind};
-
-pub type BiMap<L, R, LK, RK> = RawBiMap<<LK as MapKind<L, R>>::Map, <RK as MapKind<R, L>>::Map>;
+pub use crate::{bimap::BiMap, btree::BTreeKind};
 
 pub type BiBTreeMap<L, R> = BiMap<L, R, BTreeKind, BTreeKind>;
