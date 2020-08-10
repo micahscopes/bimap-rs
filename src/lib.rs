@@ -9,4 +9,5 @@ pub mod mem;
 
 pub use crate::{bimap::BiMap, btree::BTreeKind};
 
+/// A `BiMap` that uses a `BTreeMap` for both inner maps.
 pub type BiBTreeMap<L, R> = BiMap<L, R, BTreeKind, BTreeKind>;

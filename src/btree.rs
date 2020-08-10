@@ -1,5 +1,5 @@
 use crate::{
-    map::*,
+    map::MapKind,
     mem::{Ref, Wrap, Wrapped},
 };
 
@@ -10,6 +10,7 @@ use core::{
     ops::{Bound, Deref, RangeBounds},
 };
 
+/// The `MapKind` representing an `InnerBTreeMap`.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BTreeKind {}
 
@@ -51,72 +52,6 @@ where
     }
 }
 
-impl<K, V> Map for InnerBTreeMap<K, V> {
-    type Key = K;
-    type Value = V;
-}
-
-impl<K, V, Q: ?Sized> Contains<Q> for InnerBTreeMap<K, V>
-where
-    K: Ord + Borrow<Q>,
-    Q: Ord,
-{
-    fn contains(&self, key: &Q) -> bool {
-        self.map.contains_key(key.wrap())
-    }
-}
-
-impl<K, V, Q: ?Sized> Get<Q> for InnerBTreeMap<K, V>
-where
-    K: Ord + Borrow<Q>,
-    Q: Ord,
-{
-    fn get_entry(&self, key: &Q) -> Option<(&K, &V)> {
-        self.map
-            .get_key_value(key.wrap())
-            .map(|(k, v)| (k.deref(), v.deref()))
-    }
-}
-
-impl<K, V> Insert for InnerBTreeMap<K, V>
-where
-    K: Ord,
-{
-    fn insert(&mut self, key: Ref<K>, value: Ref<V>) {
-        self.map.insert(key, value);
-    }
-}
-
-impl<'a, K: 'a, V: 'a> Iterate<'a> for InnerBTreeMap<K, V> {
-    type Iter = Iter<'a, K, V>;
-
-    fn iter(&'a self) -> Self::Iter {
-        Iter {
-            iter: self.map.iter(),
-        }
-    }
-}
-
-impl<K, V> Length for InnerBTreeMap<K, V> {
-    fn len(&self) -> usize {
-        self.map.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.map.is_empty()
-    }
-}
-
-impl<K, V, Q: ?Sized> Remove<Q> for InnerBTreeMap<K, V>
-where
-    K: Ord + Borrow<Q>,
-    Q: Ord,
-{
-    fn remove(&mut self, key: &Q) -> Option<(Ref<K>, Ref<V>)> {
-        self.map.remove_entry(key.wrap())
-    }
-}
-
 impl<K, V> Default for InnerBTreeMap<K, V>
 where
     K: Ord,
@@ -138,6 +73,111 @@ where
     {
         self.map.extend(iter);
     }
+}
+
+mod map_impls {
+    use super::*;
+    use crate::map::*;
+
+    impl<K, V> Map for InnerBTreeMap<K, V> {
+        type Key = K;
+        type Value = V;
+    }
+
+    impl<K, V, Q: ?Sized> Contains<Q> for InnerBTreeMap<K, V>
+    where
+        K: Ord + Borrow<Q>,
+        Q: Ord,
+    {
+        fn contains(&self, key: &Q) -> bool {
+            self.map.contains_key(key.wrap())
+        }
+    }
+
+    impl<K, V, Q: ?Sized> Get<Q> for InnerBTreeMap<K, V>
+    where
+        K: Ord + Borrow<Q>,
+        Q: Ord,
+    {
+        fn get_entry(&self, key: &Q) -> Option<(&K, &V)> {
+            self.map
+                .get_key_value(key.wrap())
+                .map(|(k, v)| (k.deref(), v.deref()))
+        }
+    }
+
+    impl<K, V> Insert for InnerBTreeMap<K, V>
+    where
+        K: Ord,
+    {
+        fn insert(&mut self, key: Ref<K>, value: Ref<V>) {
+            self.map.insert(key, value);
+        }
+    }
+
+    impl<'a, K: 'a, V: 'a> Iterate<'a> for InnerBTreeMap<K, V> {
+        type Iter = Iter<'a, K, V>;
+
+        fn iter(&'a self) -> Self::Iter {
+            Iter {
+                iter: self.map.iter(),
+            }
+        }
+    }
+
+    impl<K, V> Length for InnerBTreeMap<K, V> {
+        fn len(&self) -> usize {
+            self.map.len()
+        }
+
+        fn is_empty(&self) -> bool {
+            self.map.is_empty()
+        }
+    }
+
+    impl<K, V, Q: ?Sized> Remove<Q> for InnerBTreeMap<K, V>
+    where
+        K: Ord + Borrow<Q>,
+        Q: Ord,
+    {
+        fn remove(&mut self, key: &Q) -> Option<(Ref<K>, Ref<V>)> {
+            self.map.remove_entry(key.wrap())
+        }
+    }
+}
+
+pub struct Iter<'a, K, V> {
+    iter: btree_map::Iter<'a, Ref<K>, Ref<V>>,
+}
+
+mod iter_impls {
+    use super::*;
+
+    impl<'a, K, V> Iterator for Iter<'a, K, V> {
+        type Item = (&'a K, &'a V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|(k, v)| (k.deref(), v.deref()))
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.iter.size_hint()
+        }
+    }
+
+    impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.iter.next_back().map(|(k, v)| (k.deref(), v.deref()))
+        }
+    }
+
+    impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {
+        fn len(&self) -> usize {
+            self.iter.len()
+        }
+    }
+
+    impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
 }
 
 pub struct IntoIter<K, V> {
@@ -169,36 +209,6 @@ impl<K, V> ExactSizeIterator for IntoIter<K, V> {
 }
 
 impl<K, V> FusedIterator for IntoIter<K, V> {}
-
-pub struct Iter<'a, K, V> {
-    iter: btree_map::Iter<'a, Ref<K>, Ref<V>>,
-}
-
-impl<'a, K, V> Iterator for Iter<'a, K, V> {
-    type Item = (&'a K, &'a V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(k, v)| (k.deref(), v.deref()))
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
-impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back().map(|(k, v)| (k.deref(), v.deref()))
-    }
-}
-
-impl<'a, K, V> ExactSizeIterator for Iter<'a, K, V> {
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
-
-impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
 
 pub struct Range<'a, K, V> {
     iter: btree_map::Range<'a, Ref<K>, Ref<V>>,
