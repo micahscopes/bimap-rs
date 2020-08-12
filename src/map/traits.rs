@@ -1,4 +1,4 @@
-use crate::mem::SemiRef;
+use crate::mem::Semi;
 
 pub trait Map {
     type Key;
@@ -13,7 +13,7 @@ pub trait MapKind<K, V> {
         + Length
         + Remove<K>
         + Default
-        + Extend<(SemiRef<K>, SemiRef<V>)>;
+        + Extend<(Semi<K>, Semi<V>)>;
 }
 
 pub trait Contains<Q: ?Sized>: Map {
@@ -37,7 +37,7 @@ pub trait Length: Map {
 }
 
 pub trait Insert: Map {
-    fn insert(&mut self, key: SemiRef<Self::Key>, value: SemiRef<Self::Value>);
+    fn insert(&mut self, key: Semi<Self::Key>, value: Semi<Self::Value>);
 }
 
 pub trait Iterate<'a>: Map + 'a {
@@ -47,11 +47,11 @@ pub trait Iterate<'a>: Map + 'a {
 }
 
 pub trait IntoIterate: Map {
-    type IntoIter: Iterator<Item = (SemiRef<Self::Key>, SemiRef<Self::Value>)>;
+    type IntoIter: Iterator<Item = (Semi<Self::Key>, Semi<Self::Value>)>;
 
     fn into_iter(self) -> Self::IntoIter;
 }
 
 pub trait Remove<Q: ?Sized>: Map {
-    fn remove(&mut self, key: &Q) -> Option<(SemiRef<Self::Key>, SemiRef<Self::Value>)>;
+    fn remove(&mut self, key: &Q) -> Option<(Semi<Self::Key>, Semi<Self::Value>)>;
 }

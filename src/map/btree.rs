@@ -1,6 +1,6 @@
 use crate::{
     map::traits::*,
-    mem::{SemiRef, Wrap},
+    mem::{Semi, Wrap},
 };
 
 use alloc::collections::{btree_map, BTreeMap};
@@ -19,7 +19,7 @@ where
 
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct InnerBTreeMap<K, V> {
-    map: BTreeMap<SemiRef<K>, SemiRef<V>>,
+    map: BTreeMap<Semi<K>, Semi<V>>,
 }
 
 impl<K, V> Default for InnerBTreeMap<K, V>
@@ -33,13 +33,13 @@ where
     }
 }
 
-impl<K, V> Extend<(SemiRef<K>, SemiRef<V>)> for InnerBTreeMap<K, V>
+impl<K, V> Extend<(Semi<K>, Semi<V>)> for InnerBTreeMap<K, V>
 where
     K: Ord,
 {
     fn extend<I>(&mut self, iter: I)
     where
-        I: IntoIterator<Item = (SemiRef<K>, SemiRef<V>)>,
+        I: IntoIterator<Item = (Semi<K>, Semi<V>)>,
     {
         self.map.extend(iter);
     }
@@ -75,7 +75,7 @@ mod map_impls {
         }
 
         fn get(&self, key: &Q) -> Option<&V> {
-            self.map.get(key.wrap()).map(SemiRef::deref)
+            self.map.get(key.wrap()).map(Semi::deref)
         }
     }
 
@@ -83,7 +83,7 @@ mod map_impls {
     where
         K: Ord,
     {
-        fn insert(&mut self, key: SemiRef<K>, value: SemiRef<V>) {
+        fn insert(&mut self, key: Semi<K>, value: Semi<V>) {
             self.map.insert(key, value);
         }
     }
@@ -113,7 +113,7 @@ mod map_impls {
         K: Ord + Borrow<Q>,
         Q: Ord,
     {
-        fn remove(&mut self, key: &Q) -> Option<(SemiRef<K>, SemiRef<V>)> {
+        fn remove(&mut self, key: &Q) -> Option<(Semi<K>, Semi<V>)> {
             self.map.remove_entry(key.wrap())
         }
     }
@@ -121,7 +121,7 @@ mod map_impls {
 
 #[derive(Debug)]
 pub struct Iter<'a, K, V> {
-    iter: btree_map::Iter<'a, SemiRef<K>, SemiRef<V>>,
+    iter: btree_map::Iter<'a, Semi<K>, Semi<V>>,
 }
 
 mod iter_impls {
@@ -156,14 +156,14 @@ mod iter_impls {
 
 #[derive(Debug)]
 pub struct IntoIter<K, V> {
-    iter: btree_map::IntoIter<SemiRef<K>, SemiRef<V>>,
+    iter: btree_map::IntoIter<Semi<K>, Semi<V>>,
 }
 
 mod into_iter_impls {
     use super::*;
 
     impl<K, V> Iterator for IntoIter<K, V> {
-        type Item = (SemiRef<K>, SemiRef<V>);
+        type Item = (Semi<K>, Semi<V>);
 
         fn next(&mut self) -> Option<Self::Item> {
             self.iter.next()
@@ -191,7 +191,7 @@ mod into_iter_impls {
 
 #[derive(Debug)]
 pub struct Range<'a, K, V> {
-    iter: btree_map::Range<'a, SemiRef<K>, SemiRef<V>>,
+    iter: btree_map::Range<'a, Semi<K>, Semi<V>>,
 }
 
 mod range_impls {

@@ -3,22 +3,35 @@ use crate::{
         btree::{self, BTreeKind},
         traits::*,
     },
-    mem::SemiRef,
+    mem::Semi,
 };
 
-use core::{borrow::Borrow, iter::FusedIterator, ops::RangeBounds};
+use core::{
+    borrow::Borrow,
+    iter::{FromIterator, FusedIterator},
+    ops::RangeBounds,
+};
 
 pub enum Overwritten<L, R> {
     Neither,
-    Left(L, R),
-    Right(L, R),
-    Pair(L, R),
-    Both((L, R), (L, R)),
+    Left(Pair<L, R>),
+    Right(Pair<L, R>),
+    Pair(Pair<L, R>),
+    Both(Pair<L, R>, Pair<L, R>),
 }
 
 pub struct Pair<L, R> {
     pub left: L,
     pub right: R,
+}
+
+impl<L, R> Pair<L, R> {
+    pub fn swap(self) -> Pair<R, L> {
+        Pair {
+            left: self.right,
+            right: self.left,
+        }
+    }
 }
 
 impl<L, R> Pair<L, R> {
@@ -66,8 +79,7 @@ where
     }
 
     pub fn insert(&mut self, pair: Pair<L, R>) -> Overwritten<L, R> {
-        let (left, right) = pair.into();
-        let overwritten = match (self.lmap.remove(&left), self.rmap.remove(&right)) {
+        let overwritten = match (self.left_remove(&pair.left), self.right_remove(&pair.right)) {
             (None, None) => Overwritten::Neither,
             _ => todo!(),
         };
@@ -116,11 +128,11 @@ where
         self.lmap.get(left)
     }
 
-    pub fn left_get_entry<Q: ?Sized>(&self, left: &Q) -> Option<Pair<&L, &R>>
+    pub fn left_get_pair<Q: ?Sized>(&self, left: &Q) -> Option<Pair<&L, &R>>
     where
         LK::Map: Get<Q>,
     {
-        self.lmap.get_entry(left).map(Pair::from)
+        self.lmap.get_entry(left).map(Into::into)
     }
 
     pub fn left_iter<'a>(&'a self) -> LeftIter<'a, L, R, LK>
@@ -132,34 +144,26 @@ where
         }
     }
 
-    pub fn right_iter<'a>(&'a self) -> RightIter<'a, RK::Map>
-    where
-        RK::Map: Iterate<'a>,
-    {
-        RightIter {
-            iter: self.rmap.iter(),
-        }
-    }
-
     fn insert_unchecked(&mut self, left: L, right: R) {
         let ((left_a, right_a), (left_b, right_b)) = Self::share_pair(left, right);
         self.lmap.insert(left_a, right_a);
         self.rmap.insert(right_b, left_b);
     }
 
-    fn share_pair(left: L, right: R) -> ((SemiRef<L>, SemiRef<R>), (SemiRef<L>, SemiRef<R>)) {
-        let (left_a, left_b) = SemiRef::share(left);
-        let (right_a, right_b) = SemiRef::share(right);
+    fn share_pair(left: L, right: R) -> ((Semi<L>, Semi<R>), (Semi<L>, Semi<R>)) {
+        let (left_a, left_b) = Semi::share(left).into();
+        let (right_a, right_b) = Semi::share(right).into();
         ((left_a, right_a), (left_b, right_b))
     }
 
-    fn rejoin_pair(a: (SemiRef<L>, SemiRef<R>), b: (SemiRef<L>, SemiRef<R>)) -> (L, R) {
+    fn rejoin_pair(a: (Semi<L>, Semi<R>), b: (Semi<L>, Semi<R>)) -> (L, R) {
         let (left_a, right_a) = a;
         let (left_b, right_b) = b;
-        (
-            SemiRef::reunite(left_a, left_b),
-            SemiRef::reunite(right_a, right_b),
-        )
+        todo!()
+        // (
+        //     Semi::reunite(left_a, left_b),
+        //     Semi::reunite(right_a, right_b),
+        // )
     }
 }
 
@@ -175,6 +179,23 @@ where
         Q: Ord,
     {
         todo!()
+    }
+}
+
+impl<L, R, LK, RK> FromIterator<Pair<L, R>> for BiMap<L, R, LK, RK>
+where
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = Pair<L, R>>,
+    {
+        let mut bimap = Self::new();
+        for pair in iter {
+            bimap.insert(pair);
+        }
+        bimap
     }
 }
 
@@ -236,28 +257,14 @@ pub struct LeftRange<'a, L, R> {
     iter: btree::Range<'a, L, R>,
 }
 
-impl<'a, L, R> Iterator for LeftRange<'a, L, R> {
-    type Item = (&'a L, &'a R);
+mod left_range_impls {
+    use super::*;
 
-    fn next(&mut self) -> Option<(&'a L, &'a R)> {
-        self.iter.next()
-    }
-}
+    impl<'a, L, R> Iterator for LeftRange<'a, L, R> {
+        type Item = (&'a L, &'a R);
 
-pub struct RightIter<'a, RM>
-where
-    RM: Iterate<'a>,
-{
-    iter: RM::Iter,
-}
-
-impl<'a, L: 'a, R: 'a, RM> Iterator for RightIter<'a, RM>
-where
-    RM: Map<Key = R, Value = L> + Iterate<'a>,
-{
-    type Item = (&'a L, &'a R);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(k, v)| (v, k))
+        fn next(&mut self) -> Option<(&'a L, &'a R)> {
+            self.iter.next()
+        }
     }
 }

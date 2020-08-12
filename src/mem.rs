@@ -1,3 +1,5 @@
+use crate::Pair;
+
 use alloc::boxed::Box;
 use core::{
     borrow::Borrow,
@@ -7,23 +9,24 @@ use core::{
     ops::Deref,
 };
 
-pub struct SemiRef<T> {
+pub struct Semi<T> {
     ptr: *const T,
 }
 
-impl<T> SemiRef<T> {
-    pub fn share(value: T) -> (Self, Self) {
+impl<T> Semi<T> {
+    pub fn share(value: T) -> Pair<Self, Self> {
         let ptr: *const T = Box::into_raw(Box::new(value));
-        (Self { ptr }, Self { ptr })
+        (Self { ptr }, Self { ptr }).into()
     }
 
-    pub fn reunite(part_a: Self, part_b: Self) -> T {
-        assert!(core::ptr::eq(part_a.ptr, part_b.ptr));
-        unsafe { *Box::from_raw(part_a.ptr as *mut T) }
+    pub fn reunite(parts: Pair<Self, Self>) -> T {
+        let (a, b) = parts.into();
+        assert!(core::ptr::eq(a.ptr, b.ptr));
+        unsafe { *Box::from_raw(a.ptr as *mut T) }
     }
 }
 
-impl<T> Deref for SemiRef<T> {
+impl<T> Deref for Semi<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -31,7 +34,7 @@ impl<T> Deref for SemiRef<T> {
     }
 }
 
-impl<T> Debug for SemiRef<T>
+impl<T> Debug for Semi<T>
 where
     T: Debug,
 {
@@ -40,7 +43,7 @@ where
     }
 }
 
-impl<T> Hash for SemiRef<T>
+impl<T> Hash for Semi<T>
 where
     T: Hash,
 {
@@ -49,9 +52,9 @@ where
     }
 }
 
-impl<T> Eq for SemiRef<T> where T: Eq {}
+impl<T> Eq for Semi<T> where T: Eq {}
 
-impl<T> Ord for SemiRef<T>
+impl<T> Ord for Semi<T>
 where
     T: Ord,
 {
@@ -60,7 +63,7 @@ where
     }
 }
 
-impl<T> PartialEq for SemiRef<T>
+impl<T> PartialEq for Semi<T>
 where
     T: PartialEq,
 {
@@ -69,7 +72,7 @@ where
     }
 }
 
-impl<T> PartialOrd for SemiRef<T>
+impl<T> PartialOrd for Semi<T>
 where
     T: PartialOrd,
 {
@@ -78,7 +81,7 @@ where
     }
 }
 
-impl<K, Q: ?Sized> Borrow<Wrapped<Q>> for SemiRef<K>
+impl<K, Q: ?Sized> Borrow<Wrapped<Q>> for Semi<K>
 where
     K: Borrow<Q>,
 {
