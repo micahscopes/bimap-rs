@@ -1,7 +1,9 @@
 use crate::{
-    btree::{self, BTreeKind},
-    map::*,
-    mem::Ref,
+    map::{
+        btree::{self, BTreeKind},
+        traits::*,
+    },
+    mem::{RefPair, SemiRef},
 };
 
 use core::{borrow::Borrow, ops::RangeBounds};
@@ -104,16 +106,18 @@ where
         self.right_map.insert(right_b, left_b);
     }
 
-    fn share_pair(left: L, right: R) -> ((Ref<L>, Ref<R>), (Ref<L>, Ref<R>)) {
-        let (left_a, left_b) = Ref::share(left);
-        let (right_a, right_b) = Ref::share(right);
+    fn share_pair(left: L, right: R) -> ((SemiRef<L>, SemiRef<R>), (SemiRef<L>, SemiRef<R>)) {
+        let RefPair(left_a, left_b) = RefPair::split(left);
+        let RefPair(right_a, right_b) = RefPair::split(right);
         ((left_a, right_a), (left_b, right_b))
     }
 
-    fn rejoin_pair(a: (Ref<L>, Ref<R>), b: (Ref<L>, Ref<R>)) -> (L, R) {
-        let (left_a, right_a) = a;
-        let (left_b, right_b) = b;
-        (Ref::rejoin(left_a, left_b), Ref::rejoin(right_a, right_b))
+    fn rejoin_pair(x: (SemiRef<L>, SemiRef<R>), y: (SemiRef<L>, SemiRef<R>)) -> (L, R) {
+        let (left_x, right_x) = x;
+        let (left_y, right_y) = y;
+        let left = RefPair(left_x, left_y).join();
+        let right = RefPair(right_x, right_y).join();
+        (left, right)
     }
 }
 
@@ -122,15 +126,13 @@ where
     RK: MapKind<R, L>,
     L: Ord,
 {
-    pub fn left_range<A, Q: ?Sized>(&self, range: A) -> LeftRange<'_, L, R>
+    pub fn left_range<A, Q: ?Sized>(&self, _range: A) -> LeftRange<'_, L, R>
     where
         L: Ord + Borrow<Q>,
         A: RangeBounds<Q>,
         Q: Ord,
     {
-        LeftRange {
-            iter: self.left_map.range(range),
-        }
+        todo!()
     }
 }
 
