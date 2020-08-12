@@ -1,14 +1,10 @@
 use crate::{
-    map::traits::MapKind,
+    map::traits::*,
     mem::{SemiRef, Wrap},
 };
 
 use alloc::collections::{btree_map, BTreeMap};
-use core::{
-    borrow::Borrow,
-    iter::{DoubleEndedIterator, ExactSizeIterator, FusedIterator},
-    ops::Deref,
-};
+use core::{borrow::Borrow, iter::FusedIterator, ops::Deref};
 
 /// The `MapKind` representing an `InnerBTreeMap`.
 #[derive(Clone, Copy, Debug)]
@@ -51,7 +47,6 @@ where
 
 mod map_impls {
     use super::*;
-    use crate::map::traits::*;
 
     impl<K, V> Map for InnerBTreeMap<K, V> {
         type Key = K;
@@ -80,9 +75,7 @@ mod map_impls {
         }
 
         fn get(&self, key: &Q) -> Option<&V> {
-            self.map
-                .get(key.wrap())
-                .map(SemiRef::deref)
+            self.map.get(key.wrap()).map(SemiRef::deref)
         }
     }
 
@@ -126,6 +119,7 @@ mod map_impls {
     }
 }
 
+#[derive(Debug)]
 pub struct Iter<'a, K, V> {
     iter: btree_map::Iter<'a, SemiRef<K>, SemiRef<V>>,
 }
@@ -160,48 +154,66 @@ mod iter_impls {
     impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
 }
 
+#[derive(Debug)]
 pub struct IntoIter<K, V> {
     iter: btree_map::IntoIter<SemiRef<K>, SemiRef<V>>,
 }
 
-impl<K, V> Iterator for IntoIter<K, V> {
-    type Item = (SemiRef<K>, SemiRef<V>);
+mod into_iter_impls {
+    use super::*;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
+    impl<K, V> Iterator for IntoIter<K, V> {
+        type Item = (SemiRef<K>, SemiRef<V>);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next()
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.iter.size_hint()
+        }
     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+    impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.iter.next_back()
+        }
     }
+
+    impl<K, V> ExactSizeIterator for IntoIter<K, V> {
+        fn len(&self) -> usize {
+            self.iter.len()
+        }
+    }
+
+    impl<K, V> FusedIterator for IntoIter<K, V> {}
 }
 
-impl<K, V> DoubleEndedIterator for IntoIter<K, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back()
-    }
-}
-
-impl<K, V> ExactSizeIterator for IntoIter<K, V> {
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
-
-impl<K, V> FusedIterator for IntoIter<K, V> {}
-
+#[derive(Debug)]
 pub struct Range<'a, K, V> {
     iter: btree_map::Range<'a, SemiRef<K>, SemiRef<V>>,
 }
 
-impl<'a, K, V> Iterator for Range<'a, K, V> {
-    type Item = (&'a K, &'a V);
+mod range_impls {
+    use super::*;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|(k, v)| (k.deref(), v.deref()))
+    impl<'a, K, V> Iterator for Range<'a, K, V> {
+        type Item = (&'a K, &'a V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|(k, v)| (k.deref(), v.deref()))
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.iter.size_hint()
+        }
     }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+    impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.iter.next_back().map(|(k, v)| (k.deref(), v.deref()))
+        }
     }
+
+    impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
 }

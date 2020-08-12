@@ -7,23 +7,20 @@ use core::{
     ops::Deref,
 };
 
-pub struct RefPair<T>(pub SemiRef<T>, pub SemiRef<T>);
-
-impl<T> RefPair<T> {
-    pub fn split(value: T) -> Self {
-        let ptr: *const T = Box::into_raw(Box::new(value));
-        Self(SemiRef { ptr }, SemiRef { ptr })
-    }
-
-    pub fn join(self) -> T {
-        let Self(a, b) = self;
-        assert!(core::ptr::eq(a.ptr, b.ptr));
-        unsafe { *Box::from_raw(a.ptr as *mut T) }
-    }
-}
-
 pub struct SemiRef<T> {
     ptr: *const T,
+}
+
+impl<T> SemiRef<T> {
+    pub fn share(value: T) -> (Self, Self) {
+        let ptr: *const T = Box::into_raw(Box::new(value));
+        (Self { ptr }, Self { ptr })
+    }
+
+    pub fn reunite(part_a: Self, part_b: Self) -> T {
+        assert!(core::ptr::eq(part_a.ptr, part_b.ptr));
+        unsafe { *Box::from_raw(part_a.ptr as *mut T) }
+    }
 }
 
 impl<T> Deref for SemiRef<T> {
