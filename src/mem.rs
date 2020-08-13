@@ -19,10 +19,9 @@ impl<T> Semi<T> {
         (Self { ptr }, Self { ptr }).into()
     }
 
-    pub fn reunite(parts: Pair<Self, Self>) -> T {
-        let (a, b) = parts.into();
-        assert!(core::ptr::eq(a.ptr, b.ptr));
-        unsafe { *Box::from_raw(a.ptr as *mut T) }
+    pub fn reunite(pair: Pair<Self, Self>) -> T {
+        assert!(core::ptr::eq(pair.left.ptr, pair.right.ptr));
+        unsafe { *Box::from_raw(pair.left.ptr as *mut T) }
     }
 }
 
@@ -31,6 +30,15 @@ impl<T> Deref for Semi<T> {
 
     fn deref(&self) -> &T {
         unsafe { &*self.ptr }
+    }
+}
+
+impl<K, Q: ?Sized> Borrow<Wrapped<Q>> for Semi<K>
+where
+    K: Borrow<Q>,
+{
+    fn borrow(&self) -> &Wrapped<Q> {
+        K::borrow(self).wrap()
     }
 }
 
@@ -78,15 +86,6 @@ where
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         T::partial_cmp(self, other)
-    }
-}
-
-impl<K, Q: ?Sized> Borrow<Wrapped<Q>> for Semi<K>
-where
-    K: Borrow<Q>,
-{
-    fn borrow(&self) -> &Wrapped<Q> {
-        K::borrow(self).wrap()
     }
 }
 

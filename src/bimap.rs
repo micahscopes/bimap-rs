@@ -4,6 +4,7 @@ use crate::{
         traits::*,
     },
     mem::Semi,
+    Pair,
 };
 
 use core::{
@@ -18,38 +19,6 @@ pub enum Overwritten<L, R> {
     Right(Pair<L, R>),
     Pair(Pair<L, R>),
     Both(Pair<L, R>, Pair<L, R>),
-}
-
-pub struct Pair<L, R> {
-    pub left: L,
-    pub right: R,
-}
-
-impl<L, R> Pair<L, R> {
-    pub fn swap(self) -> Pair<R, L> {
-        Pair {
-            left: self.right,
-            right: self.left,
-        }
-    }
-}
-
-impl<L, R> Pair<L, R> {
-    pub const fn new(left: L, right: R) -> Self {
-        Self { left, right }
-    }
-}
-
-impl<L, R> From<Pair<L, R>> for (L, R) {
-    fn from(pair: Pair<L, R>) -> Self {
-        (pair.left, pair.right)
-    }
-}
-
-impl<L, R> From<(L, R)> for Pair<L, R> {
-    fn from((left, right): (L, R)) -> Self {
-        Self { left, right }
-    }
 }
 
 pub struct BiMap<L, R, LK, RK>
