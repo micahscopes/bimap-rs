@@ -5,15 +5,11 @@ pub trait Map {
     type Value;
 }
 
-pub trait MapKind<K, V> {
-    type Map: Map<Key = K, Value = V>
-        + Contains<K>
-        + Get<K>
-        + Insert
-        + Length
-        + Remove<K>
-        + Default
-        + Extend<(Semi<K>, Semi<V>)>;
+pub trait MapKind<K, V>
+where
+    K: Eq,
+{
+    type Map: Default + Map<Key = K, Value = V> + Contains<K> + Get<K> + Insert + Length + Remove<K>;
 }
 
 pub trait Contains<Q: ?Sized>: Map {

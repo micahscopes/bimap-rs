@@ -1,5 +1,3 @@
-use crate::Pair;
-
 use alloc::boxed::Box;
 use core::{
     borrow::Borrow,
@@ -14,14 +12,15 @@ pub struct Semi<T> {
 }
 
 impl<T> Semi<T> {
-    pub fn share(value: T) -> Pair<Self, Self> {
+    pub fn share(value: T) -> [Self; 2] {
         let ptr: *const T = Box::into_raw(Box::new(value));
-        (Self { ptr }, Self { ptr }).into()
+        [Self { ptr }, Self { ptr }]
     }
 
-    pub fn reunite(pair: Pair<Self, Self>) -> T {
-        assert!(core::ptr::eq(pair.left.ptr, pair.right.ptr));
-        unsafe { *Box::from_raw(pair.left.ptr as *mut T) }
+    pub fn reunite(parts: [Self; 2]) -> T {
+        let [a, b] = parts;
+        assert!(core::ptr::eq(a.ptr, b.ptr));
+        unsafe { *Box::from_raw(a.ptr as *mut T) }
     }
 }
 

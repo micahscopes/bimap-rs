@@ -1,143 +1,188 @@
+//! A generic bidirectional map.
+
+// Normally I discourage glob imports but we're only bringing traits into scope.
 use crate::{
     map::{
         btree::{self, BTreeKind},
         traits::*,
     },
     mem::Semi,
-    Pair,
 };
 
 use core::{
     borrow::Borrow,
+    fmt,
     iter::{FromIterator, FusedIterator},
     ops::RangeBounds,
 };
 
-pub enum Overwritten<L, R> {
-    Neither,
-    Left(Pair<L, R>),
-    Right(Pair<L, R>),
-    Pair(Pair<L, R>),
-    Both(Pair<L, R>, Pair<L, R>),
-}
-
+/// A generic bidirectional map.
 pub struct BiMap<L, R, LK, RK>
 where
+    L: Eq,
+    R: Eq,
     LK: MapKind<L, R>,
     RK: MapKind<R, L>,
 {
-    lmap: LK::Map,
-    rmap: RK::Map,
+    left_map: LK::Map,
+    right_map: RK::Map,
 }
 
+/// # Creating a `BiMap`
 impl<L, R, LK, RK> BiMap<L, R, LK, RK>
 where
+    L: Eq,
+    R: Eq,
     LK: MapKind<L, R>,
     RK: MapKind<R, L>,
 {
-    /// Creates an empty bimap.
+    /// Creates an empty `BiMap`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use bimap::BiBTreeMap as BiMap;
+    ///
+    /// let bimap = BiMap::<char, u8>::new();
+    /// ```
     pub fn new() -> Self {
         Self {
-            lmap: Default::default(),
-            rmap: Default::default(),
+            left_map: Default::default(),
+            right_map: Default::default(),
+        }
+    }
+}
+
+/// # Inserting elements
+impl<L, R, LK, RK> BiMap<L, R, LK, RK>
+where
+    L: Eq,
+    R: Eq,
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
+    pub fn try_insert(&mut self, left: L, right: R) -> Result<(), (L, R)> {
+        if self.left_map.contains(&left) || self.right_map.contains(&right) {
+            Err((left, right))
+        } else {
+            self.insert_unchecked(left, right);
+            Ok(())
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.lmap.len()
-    }
-
-    pub fn insert(&mut self, pair: Pair<L, R>) -> Overwritten<L, R> {
-        let overwritten = match (self.left_remove(&pair.left), self.right_remove(&pair.right)) {
+    pub fn insert(&mut self, left: L, right: R) -> Overwritten<L, R> {
+        let overwritten = match (self.left_remove(&left), self.right_remove(&right)) {
             (None, None) => Overwritten::Neither,
+            (Some(left_pair), None) => {
+                // THIS IS WHAT WE NEED EQ FOR
+                if left_pair.1 == right {
+                    Overwritten::Pair(left_pair)
+                } else {
+                    Overwritten::Left(left_pair)
+                }
+            }
             _ => todo!(),
         };
 
         overwritten
     }
 
-    pub fn try_insert(&mut self, pair: Pair<L, R>) -> Result<(), Pair<L, R>> {
-        if self.lmap.contains(&pair.left) || self.rmap.contains(&pair.right) {
-            Err(pair)
-        } else {
-            self.insert_unchecked(pair.left, pair.right);
-            Ok(())
-        }
+    fn insert_unchecked(&mut self, left: L, right: R) {
+        let [left_0, left_1] = Semi::share(left);
+        let [right_0, right_1] = Semi::share(right);
+        self.left_map.insert(left_0, right_1);
+        self.right_map.insert(right_0, left_1);
     }
+}
 
-    pub fn left_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
-    where
-        LK::Map: Remove<Q>,
-    {
-        let (left_a, right_a) = self.lmap.remove(key)?;
-        let (right_b, left_b) = self.rmap.remove(&right_a).unwrap();
-        Some(Self::rejoin_pair((left_a, right_a), (left_b, right_b)))
-    }
-
-    pub fn right_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
-    where
-        RK::Map: Remove<Q>,
-    {
-        let (right_a, left_a) = self.rmap.remove(key)?;
-        let (left_b, right_b) = self.lmap.remove(&left_a).unwrap();
-        Some(Self::rejoin_pair((left_a, right_a), (left_b, right_b)))
+/// # Checking membership
+impl<L, R, LK, RK> BiMap<L, R, LK, RK>
+where
+    L: Eq,
+    R: Eq,
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
+    pub fn len(&self) -> usize {
+        self.left_map.len()
     }
 
     pub fn left_contains<Q: ?Sized>(&self, left: &Q) -> bool
     where
         LK::Map: Contains<Q>,
     {
-        self.lmap.contains(left)
+        self.left_map.contains(left)
     }
 
     pub fn left_get<Q: ?Sized>(&self, left: &Q) -> Option<&R>
     where
         LK::Map: Get<Q>,
     {
-        self.lmap.get(left)
+        self.left_map.get(left)
     }
 
-    pub fn left_get_pair<Q: ?Sized>(&self, left: &Q) -> Option<Pair<&L, &R>>
+    pub fn left_get_pair<Q: ?Sized>(&self, left: &Q) -> Option<(&L, &R)>
     where
         LK::Map: Get<Q>,
     {
-        self.lmap.get_entry(left).map(Into::into)
+        self.left_map.get_entry(left)
+    }
+}
+
+/// # Removing elements
+impl<L, R, LK, RK> BiMap<L, R, LK, RK>
+where
+    L: Eq,
+    R: Eq,
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
+    pub fn left_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
+    where
+        LK::Map: Remove<Q>,
+    {
+        let (left_0, right_1) = self.left_map.remove(key)?;
+        let (right_0, left_1) = self.right_map.remove(&right_1).unwrap();
+        let left = Semi::reunite([left_0, left_1]);
+        let right = Semi::reunite([right_0, right_1]);
+        Some((left, right))
     }
 
+    pub fn right_remove<Q: ?Sized>(&mut self, key: &Q) -> Option<(L, R)>
+    where
+        RK::Map: Remove<Q>,
+    {
+        let (right_0, left_1) = self.right_map.remove(key)?;
+        let (left_0, right_1) = self.left_map.remove(&left_1).unwrap();
+        let left = Semi::reunite([left_0, left_1]);
+        let right = Semi::reunite([right_0, right_1]);
+        Some((left, right))
+    }
+}
+
+/// # Iterating over a `BiMap`
+impl<L, R, LK, RK> BiMap<L, R, LK, RK>
+where
+    L: Eq,
+    R: Eq,
+    LK: MapKind<L, R>,
+    RK: MapKind<R, L>,
+{
     pub fn left_iter<'a>(&'a self) -> LeftIter<'a, L, R, LK>
     where
         LK::Map: Iterate<'a>,
     {
         LeftIter {
-            iter: self.lmap.iter(),
+            iter: self.left_map.iter(),
         }
-    }
-
-    fn insert_unchecked(&mut self, left: L, right: R) {
-        let ((left_a, right_a), (left_b, right_b)) = Self::share_pair(left, right);
-        self.lmap.insert(left_a, right_a);
-        self.rmap.insert(right_b, left_b);
-    }
-
-    fn share_pair(left: L, right: R) -> ((Semi<L>, Semi<R>), (Semi<L>, Semi<R>)) {
-        let (left_a, left_b) = Semi::share(left).into();
-        let (right_a, right_b) = Semi::share(right).into();
-        ((left_a, right_a), (left_b, right_b))
-    }
-
-    fn rejoin_pair(a: (Semi<L>, Semi<R>), b: (Semi<L>, Semi<R>)) -> (L, R) {
-        let (left_a, right_a) = a;
-        let (left_b, right_b) = b;
-        todo!()
-        // (
-        //     Semi::reunite(left_a, left_b),
-        //     Semi::reunite(right_a, right_b),
-        // )
     }
 }
 
+/// # Methods when the left map has kind `BTreeKind`
 impl<L, R, RK> BiMap<L, R, BTreeKind, RK>
 where
+    L: Eq,
+    R: Eq,
     RK: MapKind<R, L>,
     L: Ord,
 {
@@ -151,36 +196,103 @@ where
     }
 }
 
-impl<L, R, LK, RK> FromIterator<Pair<L, R>> for BiMap<L, R, LK, RK>
-where
-    LK: MapKind<L, R>,
-    RK: MapKind<R, L>,
-{
-    fn from_iter<I>(iter: I) -> Self
+mod _bimap_traits {
+    use super::*;
+
+    impl<L, R, LK, RK> Clone for BiMap<L, R, LK, RK>
     where
-        I: IntoIterator<Item = Pair<L, R>>,
+        L: Eq,
+        R: Eq,
+        LK: MapKind<L, R>,
+        RK: MapKind<R, L>,
     {
-        let mut bimap = Self::new();
-        for pair in iter {
-            bimap.insert(pair);
+        fn clone(&self) -> Self {
+            // let mut clone = BiMap::new();
+            // for (l, r) in self.left_iter() {
+            //     clone.insert_unchecked(l.clone(), r.clone());
+            // }
+            // clone
+            todo!()
         }
-        bimap
     }
+
+    impl<L, R, LK, RK> fmt::Debug for BiMap<L, R, LK, RK>
+    where
+        L: Eq,
+        R: Eq,
+        LK: MapKind<L, R>,
+        RK: MapKind<R, L>,
+        LK::Map: fmt::Debug,
+        RK::Map: fmt::Debug,
+    {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.debug_struct("BiMap")
+                .field("left_map", &self.left_map)
+                .field("right_map", &self.right_map)
+                .finish()
+        }
+    }
+
+    impl<L, R, LK, RK> FromIterator<(L, R)> for BiMap<L, R, LK, RK>
+    where
+        L: Eq,
+        R: Eq,
+        LK: MapKind<L, R>,
+        RK: MapKind<R, L>,
+    {
+        fn from_iter<I>(iter: I) -> Self
+        where
+            I: IntoIterator<Item = (L, R)>,
+        {
+            let mut bimap = Self::new();
+            bimap.extend(iter);
+            bimap
+        }
+    }
+
+    impl<L, R, LK, RK> Extend<(L, R)> for BiMap<L, R, LK, RK>
+    where
+        L: Eq,
+        R: Eq,
+        LK: MapKind<L, R>,
+        RK: MapKind<R, L>,
+    {
+        fn extend<I>(&mut self, iter: I)
+        where
+            I: IntoIterator<Item = (L, R)>,
+        {
+            for (left, right) in iter {
+                self.insert(left, right);
+            }
+        }
+    }
+}
+
+pub enum Overwritten<L, R> {
+    Neither,
+    Left((L, R)),
+    Right((L, R)),
+    Pair((L, R)),
+    Both((L, R), (L, R)),
 }
 
 pub struct LeftIter<'a, L, R, LK>
 where
+    L: Eq,
+    R: Eq,
     LK: MapKind<L, R>,
     LK::Map: Iterate<'a>,
 {
     iter: <LK::Map as Iterate<'a>>::Iter,
 }
 
-mod left_iter_impls {
+mod _left_iter {
     use super::*;
 
     impl<'a, L: 'a, R: 'a, LK> Iterator for LeftIter<'a, L, R, LK>
     where
+        L: Eq,
+        R: Eq,
         LK: MapKind<L, R>,
         LK::Map: Iterate<'a>,
     {
@@ -193,6 +305,8 @@ mod left_iter_impls {
 
     impl<'a, L: 'a, R: 'a, LK> ExactSizeIterator for LeftIter<'a, L, R, LK>
     where
+        L: Eq,
+        R: Eq,
         LK: MapKind<L, R>,
         LK::Map: Iterate<'a>,
         <LK::Map as Iterate<'a>>::Iter: ExactSizeIterator,
@@ -204,6 +318,8 @@ mod left_iter_impls {
 
     impl<'a, L: 'a, R: 'a, LK> FusedIterator for LeftIter<'a, L, R, LK>
     where
+        L: Eq,
+        R: Eq,
         LK: MapKind<L, R>,
         LK::Map: Iterate<'a>,
         <LK::Map as Iterate<'a>>::Iter: FusedIterator,
@@ -212,6 +328,8 @@ mod left_iter_impls {
 
     impl<'a, L: 'a, R: 'a, LK> DoubleEndedIterator for LeftIter<'a, L, R, LK>
     where
+        L: Eq,
+        R: Eq,
         LK: MapKind<L, R>,
         LK::Map: Iterate<'a>,
         <LK::Map as Iterate<'a>>::Iter: DoubleEndedIterator,
@@ -226,7 +344,7 @@ pub struct LeftRange<'a, L, R> {
     iter: btree::Range<'a, L, R>,
 }
 
-mod left_range_impls {
+mod _left_range {
     use super::*;
 
     impl<'a, L, R> Iterator for LeftRange<'a, L, R> {

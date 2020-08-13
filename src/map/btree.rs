@@ -7,7 +7,7 @@ use alloc::collections::{btree_map, BTreeMap};
 use core::{borrow::Borrow, iter::FusedIterator, ops::Deref};
 
 /// The `MapKind` representing an `InnerBTreeMap`.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct BTreeKind {}
 
 impl<K, V> MapKind<K, V> for BTreeKind
@@ -22,31 +22,20 @@ pub struct InnerBTreeMap<K, V> {
     map: BTreeMap<Semi<K>, Semi<V>>,
 }
 
-impl<K, V> Default for InnerBTreeMap<K, V>
-where
-    K: Ord,
-{
-    fn default() -> Self {
-        Self {
-            map: BTreeMap::default(),
+/// Implementations for `InnerBiBTreeMap`.
+mod _inner_btree_map {
+    use super::*;
+
+    impl<K, V> Default for InnerBTreeMap<K, V>
+    where
+        K: Ord,
+    {
+        fn default() -> Self {
+            Self {
+                map: BTreeMap::default(),
+            }
         }
     }
-}
-
-impl<K, V> Extend<(Semi<K>, Semi<V>)> for InnerBTreeMap<K, V>
-where
-    K: Ord,
-{
-    fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = (Semi<K>, Semi<V>)>,
-    {
-        self.map.extend(iter);
-    }
-}
-
-mod map_impls {
-    use super::*;
 
     impl<K, V> Map for InnerBTreeMap<K, V> {
         type Key = K;
@@ -117,6 +106,16 @@ mod map_impls {
             self.map.remove_entry(key.wrap())
         }
     }
+
+    impl<K, V> IntoIterate for InnerBTreeMap<K, V> {
+        type IntoIter = IntoIter<K, V>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntoIter {
+                iter: self.map.into_iter(),
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -124,8 +123,16 @@ pub struct Iter<'a, K, V> {
     iter: btree_map::Iter<'a, Semi<K>, Semi<V>>,
 }
 
-mod iter_impls {
+mod _impls_iter {
     use super::*;
+
+    impl<'a, K, V> Clone for Iter<'a, K, V> {
+        fn clone(&self) -> Self {
+            Self {
+                iter: self.iter.clone(),
+            }
+        }
+    }
 
     impl<'a, K, V> Iterator for Iter<'a, K, V> {
         type Item = (&'a K, &'a V);
@@ -159,7 +166,7 @@ pub struct IntoIter<K, V> {
     iter: btree_map::IntoIter<Semi<K>, Semi<V>>,
 }
 
-mod into_iter_impls {
+mod _impls_into_iter {
     use super::*;
 
     impl<K, V> Iterator for IntoIter<K, V> {
@@ -196,6 +203,14 @@ pub struct Range<'a, K, V> {
 
 mod range_impls {
     use super::*;
+
+    impl<'a, K, V> Clone for Range<'a, K, V> {
+        fn clone(&self) -> Self {
+            Self {
+                iter: self.iter.clone(),
+            }
+        }
+    }
 
     impl<'a, K, V> Iterator for Range<'a, K, V> {
         type Item = (&'a K, &'a V);
