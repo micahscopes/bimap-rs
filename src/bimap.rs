@@ -1,6 +1,5 @@
 //! A generic bidirectional map.
 
-// Normally I discourage glob imports but we're only bringing traits into scope.
 use crate::{
     map::{
         btree::{self, BTreeKind},
@@ -51,6 +50,32 @@ where
             right_map: Default::default(),
         }
     }
+
+    pub fn left_clone<'a>(&'a self) -> Self
+    where
+        LK::Map: Iterate<'a>,
+        L: Clone,
+        R: Clone,
+    {
+        let mut cloned = Self::new();
+        for (l, r) in self.left_iter() {
+            cloned.insert_unchecked(l.clone(), r.clone());
+        }
+        cloned
+    }
+
+    pub fn right_clone<'a>(&'a self) -> Self
+    where
+        RK::Map: Iterate<'a>,
+        L: Clone,
+        R: Clone,
+    {
+        let mut cloned = Self::new();
+        for (l, r) in self.right_iter() {
+            cloned.insert_unchecked(l.clone(), r.clone());
+        }
+        cloned
+    }
 }
 
 /// # Inserting elements
@@ -73,16 +98,17 @@ where
     pub fn insert(&mut self, left: L, right: R) -> Overwritten<L, R> {
         let overwritten = match (self.left_remove(&left), self.right_remove(&right)) {
             (None, None) => Overwritten::Neither,
-            (Some(left_pair), None) => {
-                // THIS IS WHAT WE NEED EQ FOR
-                if left_pair.1 == right {
-                    Overwritten::Pair(left_pair)
-                } else {
-                    Overwritten::Left(left_pair)
-                }
-            }
-            _ => todo!(),
+
+            (Some(left_pair), None) if left_pair.1 == right => Overwritten::Pair(left_pair),
+
+            (Some(left_pair), None) => Overwritten::Left(left_pair),
+
+            (None, Some(right_pair)) => Overwritten::Right(right_pair),
+
+            (Some(left_pair), Some(right_pair)) => Overwritten::Both(left_pair, right_pair),
         };
+
+        self.insert_unchecked(left, right);
 
         overwritten
     }
@@ -176,6 +202,15 @@ where
             iter: self.left_map.iter(),
         }
     }
+
+    pub fn right_iter<'a>(&'a self) -> RightIter<'a, L, R, RK>
+    where
+        RK::Map: Iterate<'a>,
+    {
+        RightIter {
+            iter: self.right_map.iter(),
+        }
+    }
 }
 
 /// # Methods when the left map has kind `BTreeKind`
@@ -201,18 +236,19 @@ mod _bimap_traits {
 
     impl<L, R, LK, RK> Clone for BiMap<L, R, LK, RK>
     where
-        L: Eq,
-        R: Eq,
+        L: Eq + Clone,
+        R: Eq + Clone,
         LK: MapKind<L, R>,
         RK: MapKind<R, L>,
+        LK::Map: for<'a> Iterate<'a>,
+        RK::Map: for<'a> Iterate<'a>,
     {
         fn clone(&self) -> Self {
-            // let mut clone = BiMap::new();
-            // for (l, r) in self.left_iter() {
-            //     clone.insert_unchecked(l.clone(), r.clone());
-            // }
-            // clone
-            todo!()
+            let mut clone = BiMap::new();
+            for (l, r) in self.left_iter() {
+                clone.insert_unchecked(l.clone(), r.clone());
+            }
+            clone
         }
     }
 
@@ -340,6 +376,70 @@ mod _left_iter {
     }
 }
 
+pub struct RightIter<'a, L, R, RK>
+where
+    L: Eq,
+    R: Eq,
+    RK: MapKind<R, L>,
+    RK::Map: Iterate<'a>,
+{
+    iter: <RK::Map as Iterate<'a>>::Iter,
+}
+
+mod _right_iter {
+    use super::*;
+
+    impl<'a, L: 'a, R: 'a, RK> Iterator for RightIter<'a, L, R, RK>
+    where
+        L: Eq,
+        R: Eq,
+        RK: MapKind<R, L>,
+        RK::Map: Iterate<'a>,
+    {
+        type Item = (&'a L, &'a R);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|(r, l)| (l, r))
+        }
+    }
+
+    impl<'a, L: 'a, R: 'a, RK> ExactSizeIterator for RightIter<'a, L, R, RK>
+    where
+        L: Eq,
+        R: Eq,
+        RK: MapKind<R, L>,
+        RK::Map: Iterate<'a>,
+        <RK::Map as Iterate<'a>>::Iter: ExactSizeIterator,
+    {
+        fn len(&self) -> usize {
+            self.iter.len()
+        }
+    }
+
+    impl<'a, L: 'a, R: 'a, RK> FusedIterator for RightIter<'a, L, R, RK>
+    where
+        L: Eq,
+        R: Eq,
+        RK: MapKind<R, L>,
+        RK::Map: Iterate<'a>,
+        <RK::Map as Iterate<'a>>::Iter: FusedIterator,
+    {
+    }
+
+    impl<'a, L: 'a, R: 'a, RK> DoubleEndedIterator for RightIter<'a, L, R, RK>
+    where
+        L: Eq,
+        R: Eq,
+        RK: MapKind<R, L>,
+        RK::Map: Iterate<'a>,
+        <RK::Map as Iterate<'a>>::Iter: DoubleEndedIterator,
+    {
+        fn next_back(&mut self) -> Option<Self::Item> {
+            self.iter.next_back().map(|(r, l)| (l, r))
+        }
+    }
+}
+
 pub struct LeftRange<'a, L, R> {
     iter: btree::Range<'a, L, R>,
 }
@@ -353,5 +453,36 @@ mod _left_range {
         fn next(&mut self) -> Option<(&'a L, &'a R)> {
             self.iter.next()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::BiBTreeMap;
+
+    use alloc::vec::Vec;
+
+    #[derive(Clone, Eq, Ord, PartialEq, PartialOrd)]
+    struct Key<'a> {
+        data: &'a Vec<u8>,
+    }
+
+    #[test]
+    fn test() {
+        let mut bimap = BiBTreeMap::new();
+
+        let data = vec![1, 2, 3];
+        let key = Key { data: &data };
+
+        bimap.insert(key, 1);
+
+        let new_data = vec![1, 2, 3];
+        let new_key = Key { data: &new_data };
+
+        assert_eq!(bimap.left_get(&new_key), Some(&1));
+
+        let b = bimap.left_clone();
+
+        assert_eq!(b.left_get(&new_key), Some(&1));
     }
 }
