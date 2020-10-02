@@ -1,5 +1,8 @@
 use crate::mem::Semi;
 
+/// The base trait representing any map that can be used in a `BiMap`.
+///
+/// This trait intentionally has no methods, only the associated types `Key` and `Value`.
 pub trait Map {
     type Key;
     type Value;
@@ -12,6 +15,14 @@ where
     type Map: Default + Map<Key = K, Value = V> + Contains<K> + Get<K> + Insert + Length + Remove<K>;
 }
 
+pub trait Length: Map {
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
 pub trait Contains<Q: ?Sized>: Map {
     fn contains(&self, key: &Q) -> bool;
 }
@@ -21,14 +32,6 @@ pub trait Get<Q: ?Sized>: Map {
 
     fn get(&self, key: &Q) -> Option<&Self::Value> {
         self.get_entry(key).map(|(_, v)| v)
-    }
-}
-
-pub trait Length: Map {
-    fn len(&self) -> usize;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 

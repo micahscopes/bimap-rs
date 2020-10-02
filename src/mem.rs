@@ -7,6 +7,14 @@ use core::{
     ops::Deref,
 };
 
+pub fn deref_pair<'l, 'r, L, R>((l, r): (&'l L, &'r R)) -> (&'l L::Target, &'r R::Target)
+where
+    L: Deref,
+    R: Deref,
+{
+    (&*l, &*r)
+}
+
 pub struct Semi<T> {
     ptr: *const T,
 }
@@ -88,7 +96,7 @@ where
     }
 }
 
-#[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Default, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Wrapped<T: ?Sized>(T);
 
