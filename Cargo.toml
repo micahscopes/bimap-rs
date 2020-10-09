@@ -1,6 +1,6 @@
 [package]
 name = "bimap"
-version = "0.5.2"
+version = "0.6.0-alpha"
 authors = ["Billy Rieger <wrieger@protonmail.com>"]
 description = "Bijective maps"
 repository = "https://github.com/billyrieger/bimap-rs/"
@@ -17,9 +17,6 @@ std = []
 
 [dependencies]
 serde = { version = "1.0", optional = true }
-
-[dev-dependencies]
-serde_json = "1.0"
 
 # This ensures that documentation for optional features is on docs.rs.
 [package.metadata.docs.rs]
