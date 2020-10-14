@@ -5,9 +5,9 @@ pub trait MapBase {
     type Value;
 }
 
-pub trait Map: MapBase + New + Length + Contains + Get + Insert + Remove {}
+pub trait Map: MapBase + New + Length + Contains + Get + Insert + Remove + IterateOwned {}
 
-impl<T> Map for T where T: MapBase + New + Length + Contains + Get + Insert + Remove {}
+impl<T> Map for T where T: MapBase + New + Length + Contains + Get + Insert + Remove + IterateOwned {}
 
 pub trait MapKind<K, V> {
     type Map: MapBase<Key = K, Value = V>;

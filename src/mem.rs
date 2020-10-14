@@ -31,7 +31,7 @@ impl<T> Semi<T> {
         [Self { ptr }, Self { ptr }]
     }
 
-    pub fn reunite([a, b]: [Self; 2]) -> T {
+    pub fn reunite(a: Self, b: Self) -> T {
         assert!(core::ptr::eq(a.ptr, b.ptr));
         unsafe { *Box::from_raw(a.ptr as *mut T) }
     }

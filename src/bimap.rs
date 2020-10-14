@@ -28,7 +28,11 @@ pub enum Overwritten<L, R> {
 }
 
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct RawBiMap<LMap, RMap> {
+pub struct RawBiMap<LMap, RMap>
+where
+    LMap: Map,
+    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
+{
     left_map: LMap,
     right_map: RMap,
 }
@@ -54,6 +58,14 @@ where
         debug_assert_eq!(self.left_map.is_empty(), self.right_map.is_empty());
         self.left_map.is_empty()
     }
+
+    // pub fn into_iter_left(self) -> IntoIterLeft<LMap, RMap> {
+    //     let Self { left_map, right_map } = self;
+    //     IntoIterLeft {
+    //         remaining: self.left_map.iter_owned(),
+    //         right_map: self.right_map,
+    //     }
+    // }
 
     pub fn iter_left<'a>(&'a self) -> IterLeft<'a, LMap::IterRef>
     where
@@ -95,7 +107,7 @@ where
     {
         let (la, rb) = self.left_map.remove(left)?;
         let (ra, lb) = self.right_map.remove(&rb)?;
-        Some((Semi::reunite([la, lb]), Semi::reunite([ra, rb])))
+        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
     }
 
     pub fn remove_right<Q: ?Sized>(&mut self, right: &Q) -> Option<(L, R)>
@@ -104,14 +116,16 @@ where
     {
         let (ra, lb) = self.right_map.remove(right)?;
         let (la, rb) = self.left_map.remove(&lb)?;
-        Some((Semi::reunite([la, lb]), Semi::reunite([ra, rb])))
+        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
     }
 
     pub fn try_insert(&mut self, left: L, right: R) -> Result<(), (L, R)> {
         if self.left_map.contains(&left) || self.right_map.contains(&right) {
             Err((left, right))
         } else {
-            self.insert_unchecked(left, right);
+            unsafe {
+                self.insert_unchecked(left, right);
+            }
             Ok(())
         }
     }
@@ -123,12 +137,14 @@ where
             (Some(lpair), Some(rpair)) => Overwritten::Two(lpair, rpair),
         };
 
-        self.insert_unchecked(left, right);
+        unsafe {
+            self.insert_unchecked(left, right);
+        }
 
         overwritten
     }
 
-    fn insert_unchecked(&mut self, left: L, right: R)
+    pub unsafe fn insert_unchecked(&mut self, left: L, right: R)
     where
         LMap: Insert,
         RMap: Insert,
@@ -150,7 +166,9 @@ where
     fn clone(&self) -> Self {
         let mut bimap = RawBiMap::new();
         for (l, r) in self.iter_left() {
-            bimap.insert_unchecked(l.clone(), r.clone());
+            unsafe {
+                bimap.insert_unchecked(l.clone(), r.clone());
+            }
         }
         bimap
     }
@@ -167,6 +185,49 @@ where
             bimap.insert(l, r);
         }
         bimap
+    }
+}
+
+impl<LMap, RMap> Drop for RawBiMap<LMap, RMap>
+where
+    LMap: Map,
+    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
+{
+    fn drop(&mut self) {
+        todo!()
+    }
+}
+
+pub struct IntoIterLeft<LMap, RMap>
+where
+    LMap: Map,
+    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
+{
+    remaining: LMap::IterOwned,
+    right_map: RMap,
+}
+
+impl<LMap, RMap> Drop for IntoIterLeft<LMap, RMap>
+where
+    LMap: Map,
+    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
+{
+    fn drop(&mut self) {
+        while let Some(_) = self.next() {}
+    }
+}
+
+impl<L, R, LMap, RMap> Iterator for IntoIterLeft<LMap, RMap>
+where
+    LMap: Map<Key = L, Value = R>,
+    RMap: Map<Key = R, Value = L>,
+{
+    type Item = (L, R);
+
+    fn next(&mut self) -> Option<(L, R)> {
+        let (la, ra) = self.remaining.next()?;
+        let (rb, lb) = self.right_map.remove(&ra).unwrap();
+        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
     }
 }
 
