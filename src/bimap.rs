@@ -1,17 +1,9 @@
-use crate::{maps::btree::BTreeKind, mem::Semi, traits::*};
+use crate::{maps::btree::BTreeKind, traits::*};
 
 #[cfg(feature = "std")]
 use crate::maps::hash::HashKind;
 
 use core::{iter::FromIterator, marker::PhantomData, ops::Deref};
-
-fn deref_pair<'a, L: Deref, R: Deref>((l, r): (&'a L, &'a R)) -> (&'a L::Target, &'a R::Target) {
-    (&*l, &*r)
-}
-
-fn swap_pair<L, R>((l, r): (L, R)) -> (R, L) {
-    (r, l)
-}
 
 pub type BiMap<L, R, LKind, RKind> =
     RawBiMap<<LKind as MapKind<L, R>>::Map, <RKind as MapKind<R, L>>::Map>;
@@ -22,19 +14,15 @@ pub type BiBTreeMap<L, R> = BiMap<L, R, BTreeKind, BTreeKind>;
 pub type BiHashMap<L, R> = BiMap<L, R, HashKind, HashKind>;
 
 pub enum Overwritten<L, R> {
-    None,
+    Zero,
     One((L, R)),
     Two((L, R), (L, R)),
 }
 
 #[derive(Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct RawBiMap<LMap, RMap>
-where
-    LMap: Map,
-    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
-{
-    left_map: LMap,
-    right_map: RMap,
+pub struct RawBiMap<LMap, RMap> {
+    lmap: LMap,
+    rmap: RMap,
 }
 
 impl<L, R, LMap, RMap> RawBiMap<LMap, RMap>
@@ -44,45 +32,37 @@ where
 {
     pub fn new() -> Self {
         Self {
-            left_map: LMap::new(),
-            right_map: RMap::new(),
+            lmap: LMap::new(),
+            rmap: RMap::new(),
         }
     }
 
     pub fn len(&self) -> usize {
-        debug_assert_eq!(self.left_map.len(), self.right_map.len());
-        self.left_map.len()
+        debug_assert_eq!(self.lmap.len(), self.rmap.len());
+        self.lmap.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        debug_assert_eq!(self.left_map.is_empty(), self.right_map.is_empty());
-        self.left_map.is_empty()
+        debug_assert_eq!(self.lmap.is_empty(), self.rmap.is_empty());
+        self.lmap.is_empty()
     }
 
-    // pub fn into_iter_left(self) -> IntoIterLeft<LMap, RMap> {
-    //     let Self { left_map, right_map } = self;
-    //     IntoIterLeft {
-    //         remaining: self.left_map.iter_owned(),
-    //         right_map: self.right_map,
-    //     }
-    // }
-
-    pub fn iter_left<'a>(&'a self) -> IterLeft<'a, LMap::IterRef>
+    pub fn iter_left<'a>(&'a self) -> IterLeft<'a, LMap, RMap>
     where
         LMap: IterateRef<'a>,
     {
         IterLeft {
-            iter: self.left_map.iter_ref(),
+            iter: self.lmap.iter_ref(),
             marker: PhantomData,
         }
     }
 
-    pub fn iter_right<'a>(&'a self) -> IterRight<'a, RMap::IterRef>
+    pub fn iter_right<'a>(&'a self) -> IterRight<'a, LMap, RMap>
     where
         RMap: IterateRef<'a>,
     {
         IterRight {
-            iter: self.right_map.iter_ref(),
+            iter: self.rmap.iter_ref(),
             marker: PhantomData,
         }
     }
@@ -91,36 +71,40 @@ where
     where
         LMap: Get<Q>,
     {
-        self.left_map.get(left).map(Deref::deref)
+        self.lmap.get(left).map(Deref::deref)
     }
 
     pub fn get_right<Q: ?Sized>(&self, right: &Q) -> Option<&L>
     where
         RMap: Get<Q>,
     {
-        self.right_map.get(right).map(Deref::deref)
+        self.rmap.get(right).map(Deref::deref)
     }
 
     pub fn remove_left<Q: ?Sized>(&mut self, left: &Q) -> Option<(L, R)>
     where
         LMap: Remove<Q>,
     {
-        let (la, rb) = self.left_map.remove(left)?;
-        let (ra, lb) = self.right_map.remove(&rb)?;
-        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
+        let (lkey, rvalue) = self.lmap.remove(left)?;
+        let (rkey, lvalue) = self.rmap.remove(&rvalue).unwrap();
+        let l = crate::mem::unite(lkey, lvalue);
+        let r = crate::mem::unite(rkey, rvalue);
+        Some((l, r))
     }
 
     pub fn remove_right<Q: ?Sized>(&mut self, right: &Q) -> Option<(L, R)>
     where
         RMap: Remove<Q>,
     {
-        let (ra, lb) = self.right_map.remove(right)?;
-        let (la, rb) = self.left_map.remove(&lb)?;
-        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
+        let (rkey, lvalue) = self.rmap.remove(right)?;
+        let (lkey, rvalue) = self.lmap.remove(&lvalue).unwrap();
+        let l = crate::mem::unite(lkey, lvalue);
+        let r = crate::mem::unite(rkey, rvalue);
+        Some((l, r))
     }
 
     pub fn try_insert(&mut self, left: L, right: R) -> Result<(), (L, R)> {
-        if self.left_map.contains(&left) || self.right_map.contains(&right) {
+        if self.lmap.contains(&left) || self.rmap.contains(&right) {
             Err((left, right))
         } else {
             unsafe {
@@ -132,7 +116,7 @@ where
 
     pub fn insert(&mut self, left: L, right: R) -> Overwritten<L, R> {
         let overwritten = match (self.remove_left(&left), self.remove_right(&right)) {
-            (None, None) => Overwritten::None,
+            (None, None) => Overwritten::Zero,
             (Some(pair), None) | (None, Some(pair)) => Overwritten::One(pair),
             (Some(lpair), Some(rpair)) => Overwritten::Two(lpair, rpair),
         };
@@ -144,33 +128,11 @@ where
         overwritten
     }
 
-    pub unsafe fn insert_unchecked(&mut self, left: L, right: R)
-    where
-        LMap: Insert,
-        RMap: Insert,
-    {
-        let [la, lb] = Semi::share(left);
-        let [ra, rb] = Semi::share(right);
-        self.left_map.insert(la, rb);
-        self.right_map.insert(ra, lb);
-    }
-}
-
-impl<L, R, LMap, RMap> Clone for RawBiMap<LMap, RMap>
-where
-    LMap: Map<Key = L, Value = R> + for<'a> IterateRef<'a>,
-    RMap: Map<Key = R, Value = L>,
-    L: Clone,
-    R: Clone,
-{
-    fn clone(&self) -> Self {
-        let mut bimap = RawBiMap::new();
-        for (l, r) in self.iter_left() {
-            unsafe {
-                bimap.insert_unchecked(l.clone(), r.clone());
-            }
-        }
-        bimap
+    pub unsafe fn insert_unchecked(&mut self, left: L, right: R) {
+        let (lkey, rvalue) = crate::mem::split(left);
+        let (rkey, lvalue) = crate::mem::split(right);
+        self.lmap.insert(lkey, lvalue);
+        self.rmap.insert(rkey, rvalue);
     }
 }
 
@@ -188,57 +150,19 @@ where
     }
 }
 
-impl<LMap, RMap> Drop for RawBiMap<LMap, RMap>
+pub struct IterLeft<'a, LMap, RMap>
 where
-    LMap: Map,
+    LMap: Map + IterateRef<'a>,
     RMap: Map<Key = LMap::Value, Value = LMap::Key>,
 {
-    fn drop(&mut self) {
-        todo!()
-    }
+    iter: LMap::IterRef,
+    marker: PhantomData<&'a (LMap, RMap)>,
 }
 
-pub struct IntoIterLeft<LMap, RMap>
+impl<'a, L: 'a, R: 'a, LMap, RMap> Iterator for IterLeft<'a, LMap, RMap>
 where
-    LMap: Map,
-    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
-{
-    remaining: LMap::IterOwned,
-    right_map: RMap,
-}
-
-impl<LMap, RMap> Drop for IntoIterLeft<LMap, RMap>
-where
-    LMap: Map,
-    RMap: Map<Key = LMap::Value, Value = LMap::Key>,
-{
-    fn drop(&mut self) {
-        while let Some(_) = self.next() {}
-    }
-}
-
-impl<L, R, LMap, RMap> Iterator for IntoIterLeft<LMap, RMap>
-where
-    LMap: Map<Key = L, Value = R>,
+    LMap: Map<Key = L, Value = R> + IterateRef<'a>,
     RMap: Map<Key = R, Value = L>,
-{
-    type Item = (L, R);
-
-    fn next(&mut self) -> Option<(L, R)> {
-        let (la, ra) = self.remaining.next()?;
-        let (rb, lb) = self.right_map.remove(&ra).unwrap();
-        Some((Semi::reunite(la, lb), Semi::reunite(ra, rb)))
-    }
-}
-
-pub struct IterLeft<'a, I> {
-    iter: I,
-    marker: PhantomData<&'a ()>,
-}
-
-impl<'a, I, L: 'a, R: 'a> Iterator for IterLeft<'a, I>
-where
-    I: Iterator<Item = (&'a Semi<L>, &'a Semi<R>)>,
 {
     type Item = (&'a L, &'a R);
 
@@ -247,14 +171,19 @@ where
     }
 }
 
-pub struct IterRight<'a, I> {
-    iter: I,
-    marker: PhantomData<&'a ()>,
+pub struct IterRight<'a, LMap, RMap>
+where
+    LMap: Map,
+    RMap: Map<Key = LMap::Value, Value = LMap::Key> + IterateRef<'a>,
+{
+    iter: RMap::IterRef,
+    marker: PhantomData<&'a (LMap, RMap)>,
 }
 
-impl<'a, I, L: 'a, R: 'a> Iterator for IterRight<'a, I>
+impl<'a, L: 'a, R: 'a, LMap, RMap> Iterator for IterRight<'a, LMap, RMap>
 where
-    I: Iterator<Item = (&'a Semi<R>, &'a Semi<L>)>,
+    LMap: Map<Key = L, Value = R>,
+    RMap: Map<Key = R, Value = L> + IterateRef<'a>,
 {
     type Item = (&'a L, &'a R);
 
@@ -263,14 +192,10 @@ where
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn deref_pair<'a, L: Deref, R: Deref>((l, r): (&'a L, &'a R)) -> (&'a L::Target, &'a R::Target) {
+    (&*l, &*r)
+}
 
-    #[test]
-    fn test() {
-        let mut bimap = BiHashMap::new();
-        bimap.insert("hello".to_owned(), 10);
-        assert_eq!(bimap.get_left("hello"), Some(&10));
-    }
+fn swap_pair<L, R>((l, r): (L, R)) -> (R, L) {
+    (r, l)
 }

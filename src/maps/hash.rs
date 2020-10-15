@@ -1,5 +1,5 @@
 use crate::{
-    mem::{Semi, Wrap},
+    mem::{KeyRef, ValueRef, Wrap},
     traits::*,
 };
 
@@ -24,7 +24,7 @@ where
 }
 
 pub struct InnerHashMap<K, V, S = RandomState> {
-    map: HashMap<Semi<K>, Semi<V>, S>,
+    map: HashMap<KeyRef<K>, ValueRef<V>, S>,
 }
 
 impl<K, V, S> InnerHashMap<K, V, S> {
@@ -38,15 +38,10 @@ impl<K, V, S> InnerHashMap<K, V, S> {
 impl<K, V, S> MapBase for InnerHashMap<K, V, S> {
     type Key = K;
     type Value = V;
-}
 
-impl<K, V, S> New for InnerHashMap<K, V, S>
-where
-    S: BuildHasher + Default,
-{
     fn new() -> Self {
         Self {
-            map: HashMap::with_hasher(S::default()),
+            map: HashMap::with_hasher(todo!()),
         }
     }
 }
@@ -78,7 +73,7 @@ where
     Q: Eq + Hash + ?Sized,
     S: BuildHasher,
 {
-    fn get(&self, value: &Q) -> Option<&Semi<V>> {
+    fn get(&self, value: &Q) -> Option<&ValueRef<V>> {
         self.map.get(value.wrap())
     }
 }
@@ -88,7 +83,7 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
-    fn insert(&mut self, key: Semi<K>, value: Semi<V>) {
+    fn insert(&mut self, key: KeyRef<K>, value: ValueRef<V>) {
         self.map.insert(key, value);
     }
 }
@@ -99,7 +94,7 @@ where
     Q: Eq + Hash + ?Sized,
     S: BuildHasher,
 {
-    fn remove(&mut self, value: &Q) -> Option<(Semi<K>, Semi<V>)> {
+    fn remove(&mut self, value: &Q) -> Option<(KeyRef<K>, ValueRef<V>)> {
         self.map.remove_entry(value.wrap())
     }
 }
@@ -129,11 +124,11 @@ where
 
 #[derive(Debug)]
 pub struct IterOwned<K, V> {
-    iter: hash_map::IntoIter<Semi<K>, Semi<V>>,
+    iter: hash_map::IntoIter<KeyRef<K>, ValueRef<V>>,
 }
 
 impl<K, V> Iterator for IterOwned<K, V> {
-    type Item = (Semi<K>, Semi<V>);
+    type Item = (KeyRef<K>, ValueRef<V>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
@@ -150,7 +145,7 @@ impl<K, V> FusedIterator for IterOwned<K, V> {}
 
 #[derive(Debug)]
 pub struct IterRef<'a, K, V> {
-    iter: hash_map::Iter<'a, Semi<K>, Semi<V>>,
+    iter: hash_map::Iter<'a, KeyRef<K>, ValueRef<V>>,
 }
 
 impl<'a, K, V> Clone for IterRef<'a, K, V> {
@@ -162,7 +157,7 @@ impl<'a, K, V> Clone for IterRef<'a, K, V> {
 }
 
 impl<'a, K, V> Iterator for IterRef<'a, K, V> {
-    type Item = (&'a Semi<K>, &'a Semi<V>);
+    type Item = (&'a KeyRef<K>, &'a ValueRef<V>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()

@@ -1,5 +1,5 @@
 use crate::{
-    mem::{Semi, Wrap},
+    mem::{KeyRef, ValueRef, Wrap},
     traits::*,
 };
 
@@ -16,18 +16,16 @@ where
 }
 
 pub struct InnerBTreeMap<K, V> {
-    map: BTreeMap<Semi<K>, Semi<V>>,
+    map: BTreeMap<KeyRef<K>, ValueRef<V>>,
 }
 
-impl<K, V> MapBase for InnerBTreeMap<K, V> {
-    type Key = K;
-    type Value = V;
-}
-
-impl<K, V> New for InnerBTreeMap<K, V>
+impl<K, V> MapBase for InnerBTreeMap<K, V>
 where
     K: Ord,
 {
+    type Key = K;
+    type Value = V;
+
     fn new() -> Self {
         Self {
             map: BTreeMap::new(),
@@ -50,7 +48,7 @@ where
     K: Ord + Borrow<Q>,
     Q: Ord,
 {
-    fn get(&self, key: &Q) -> Option<&Semi<V>> {
+    fn get(&self, key: &Q) -> Option<&ValueRef<V>> {
         self.map.get(key.wrap())
     }
 }
@@ -59,7 +57,7 @@ impl<K, V> Insert for InnerBTreeMap<K, V>
 where
     K: Ord,
 {
-    fn insert(&mut self, key: Semi<K>, value: Semi<V>) {
+    fn insert(&mut self, key: KeyRef<K>, value: ValueRef<V>) {
         self.map.insert(key, value);
     }
 }
@@ -79,18 +77,18 @@ where
     K: Ord + Borrow<Q>,
     Q: Ord,
 {
-    fn remove(&mut self, key: &Q) -> Option<(Semi<K>, Semi<V>)> {
+    fn remove(&mut self, key: &Q) -> Option<(KeyRef<K>, ValueRef<V>)> {
         self.map.remove_entry(key.wrap())
     }
 }
 
 #[derive(Debug)]
 pub struct IterOwned<K, V> {
-    iter: btree_map::IntoIter<Semi<K>, Semi<V>>,
+    iter: btree_map::IntoIter<KeyRef<K>, ValueRef<V>>,
 }
 
 impl<K, V> Iterator for IterOwned<K, V> {
-    type Item = (Semi<K>, Semi<V>);
+    type Item = (KeyRef<K>, ValueRef<V>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
