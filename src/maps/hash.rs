@@ -35,6 +35,31 @@ impl<K, V, S> InnerHashMap<K, V, S> {
     }
 }
 
+trait Foo {
+    type Key;
+    type Value;
+
+    fn clone_with<M>(&self) -> (M, Self)
+    where
+        M: Foo<Key = Self::Value, Value = Self::Key>;
+}
+
+impl<K, V, S> Foo for InnerHashMap<K, V, S>
+where
+    K: Eq + Hash,
+    S: BuildHasher + Default,
+{
+    type Key = K;
+    type Value = V;
+
+    fn clone_with<M>(&self) -> (M, Self)
+    where
+        M: Foo<Key = V, Value = K>,
+    {
+        todo!()
+    }
+}
+
 impl<K, V, S> MapBase for InnerHashMap<K, V, S> {
     type Key = K;
     type Value = V;

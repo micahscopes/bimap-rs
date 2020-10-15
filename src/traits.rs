@@ -1,5 +1,18 @@
 use crate::mem::{KeyRef, ValueRef};
 
+pub trait BaseMap {
+    type Key;
+    type Value;
+
+    fn new() -> Self;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool;
+    fn insert_unchecked(&mut self, key: KeyRef<Self::Key>, value: ValueRef<Self::Value>);
+    fn clone_with<M>(&self) -> (M, Self)
+    where
+        M: BaseMap<Key = Self::Value, Value = Self::Key>;
+}
+
 pub trait MapBase {
     type Key;
     type Value;

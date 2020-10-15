@@ -1,7 +1,6 @@
 use crate::{
     bimap::RawBiMap,
     traits::{IterateRef, Map, MapKind},
-    traits::New,
     traits::Insert,
 };
 
