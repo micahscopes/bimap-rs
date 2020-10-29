@@ -29,3 +29,9 @@ pub trait Get<Q: ?Sized = <Self as InnerMap>::Key>: InnerMap {
 pub trait Remove<Q: ?Sized = <Self as InnerMap>::Key>: InnerMap {
     fn remove_entry(&self, k: &Q) -> Option<(Half<Self::Key>, Half<Self::Value>)>;
 }
+
+pub trait IterateOwned: InnerMap {
+    type IterOwned: Iterator<Item = (Half<Self::Key>, Half<Self::Value>)>;
+
+    fn iter_owned(self) -> Self::IterOwned;
+}

@@ -28,6 +28,13 @@ where
         self.lmap.contains_key(l)
     }
 
+    pub fn contains_right<Q: ?Sized>(&self, r: &Q) -> bool
+    where
+        RMap: Contains<Q>,
+    {
+        self.rmap.contains_key(r)
+    }
+
     pub fn get_left<Q: ?Sized>(&self, l: &Q) -> Option<&R>
     where
         LMap: Get<Q>,
@@ -67,8 +74,25 @@ where
         Some((l, r))
     }
 
+    pub fn remove_right<Q: ?Sized>(&mut self, r: &Q) -> Option<(L, R)>
+    where
+        RMap: Remove<Q>,
+    {
+        let (ra, la) = self.rmap.remove_entry(r)?;
+        let (lb, rb) = self.lmap.remove_entry(&la).unwrap();
+        let l = Half::rejoin(la, lb);
+        let r = Half::rejoin(ra, rb);
+        Some((l, r))
+    }
+
     pub fn insert(&mut self, l: L, r: R) -> Overwritten<L, R> {
-        todo!()
+        let overwritten = match (self.remove_left(&l), self.remove_right(&r)) {
+            (None, None) => Overwritten::Zero,
+            (Some(pair), None) | (None, Some(pair)) => Overwritten::One(pair),
+            (Some(lpair), Some(rpair)) => Overwritten::Two(lpair, rpair),
+        };
+        self.insert_unchecked(l, r);
+        overwritten
     }
 
     pub fn try_insert(&mut self, l: L, r: R) -> Result<(), (L, R)> {
